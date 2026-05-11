@@ -11,6 +11,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>
+#include <unistd.h>
 
 #define ROTL64(x, n) (((x) << (n)) | ((x) >> (64 - (n))))
 #define BSWAP64(x) ( \
