@@ -1,0 +1,17 @@
+{
+  "name": "hash256-gpu-miner",
+  "version": "2.0.0",
+  "description": "GPU-accelerated (CUDA keccak256) miner for HASH256 token",
+  "main": "miner.js",
+  "scripts": {
+    "start": "node miner.js",
+    "build": "bash build.sh",
+    "check": "node -e \"const {ethers}=require('ethers');console.log('ethers ok')\""
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "ethers": "^6.13.5"
+  },
+  "license": "MIT"
+}
