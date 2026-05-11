@@ -116,12 +116,32 @@ async function main() {
         continue;
       }
 
+      /* Pre-flight simulation — cheaper than a failed on-chain tx */
+      try {
+        await writeContract.mine.staticCall(nonce);
+      } catch (simErr) {
+        console.error("Simulation reverted — skipping submit:");
+        console.error("  selector :", simErr.data || "(no data)");
+        console.error("  message  :", simErr.shortMessage || simErr.message);
+        continue; // challenge may have just changed, go re-read state
+      }
+
       const tx = await writeContract.mine(nonce);
       console.log("TX sent  :", tx.hash);
       const receipt = await tx.wait();
       console.log("Success  : block", receipt.blockNumber);
     } catch (err) {
-      console.error("Error:", err.shortMessage || err.message);
+      const msg = err.shortMessage || err.message || String(err);
+      console.error("Error:", msg);
+      if (err.data)   console.error("  data    :", err.data);
+      if (err.reason) console.error("  reason  :", err.reason);
+
+      // On a revert the challenge almost certainly changed — loop back
+      // immediately instead of sleeping.
+      if (msg.includes("reverted") || err.code === "CALL_EXCEPTION") {
+        console.log("Revert detected – restarting mining round...");
+        continue;
+      }
       await new Promise(r => setTimeout(r, 5000));
     }
   }
