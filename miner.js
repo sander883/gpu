@@ -6,7 +6,8 @@ const readline   = require("readline");
 const path       = require("path");
 const fs         = require("fs");
 
-const RPC_URL         = process.env.RPC_URL;
+const RPC_URL         = process.env.RPC_URL;         // untuk baca state (Infura/Alchemy)
+const PRIVATE_RPC_URL = process.env.PRIVATE_RPC_URL; // untuk kirim TX (Flashbots/MEV-Blocker), opsional
 const PRIVATE_KEY     = process.env.PRIVATE_KEY;
 const CONTRACT_ADDRESS = "0xAC7b5d06fa1e77D08aea40d46cB7C5923A87A0cc";
 const GPU_BIN         = path.join(__dirname, "miner_gpu");
@@ -68,17 +69,30 @@ async function main() {
     process.exit(1);
   }
 
-  const provider = new ethers.JsonRpcProvider(RPC_URL);
-  const wallet   = new ethers.Wallet(PRIVATE_KEY, provider);
-  const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, wallet);
+  // Provider buat baca state — harus cepat (Infura / Alchemy)
+  const readProvider  = new ethers.JsonRpcProvider(RPC_URL);
+
+  // Provider buat kirim TX — pakai Flashbots/MEV-Blocker kalau ada, fallback ke RPC_URL
+  const writeProvider = PRIVATE_RPC_URL
+    ? new ethers.JsonRpcProvider(PRIVATE_RPC_URL)
+    : readProvider;
+
+  const readContract  = new ethers.Contract(CONTRACT_ADDRESS, ABI, readProvider);
+  const wallet        = new ethers.Wallet(PRIVATE_KEY, writeProvider);
+  const writeContract = new ethers.Contract(CONTRACT_ADDRESS, ABI, wallet);
+
+  const txLabel = PRIVATE_RPC_URL
+    ? `private (${PRIVATE_RPC_URL.replace(/https?:\/\//, "")})`
+    : "public mempool";
 
   console.log("Wallet  :", wallet.address);
   console.log("Contract:", CONTRACT_ADDRESS);
+  console.log("TX via  :", txLabel);
 
   while (true) {
     const [state, challenge] = await Promise.all([
-      contract.miningState(),
-      contract.getChallenge(wallet.address),
+      readContract.miningState(),
+      readContract.getChallenge(wallet.address),
     ]);
 
     const difficulty = BigInt(state.difficulty.toString());
@@ -96,13 +110,13 @@ async function main() {
       console.log("\nFOUND nonce:", nonce.toString());
 
       /* Verify challenge hasn't changed while GPU was mining */
-      const currentChallenge = await contract.getChallenge(wallet.address);
+      const currentChallenge = await readContract.getChallenge(wallet.address);
       if (currentChallenge !== challenge) {
         console.log("Challenge changed during mining – restarting...");
         continue;
       }
 
-      const tx = await contract.mine(nonce);
+      const tx = await writeContract.mine(nonce);
       console.log("TX sent  :", tx.hash);
       const receipt = await tx.wait();
       console.log("Success  : block", receipt.blockNumber);
